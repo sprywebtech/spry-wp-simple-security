@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-07-25
+
+### Fixed
+
+- Fixed administrator backup downloads for filenames containing multiple extensions, such as `wp-config.php.bak.php` and `uploads.htaccess.bak.php`.
+- Replaced `sanitize_file_name()` validation with exact basename, extension, and available-backup checks so valid protected backups are not renamed before validation.
+
 ## [1.0.2] - 2026-07-25
 
 ### Added
