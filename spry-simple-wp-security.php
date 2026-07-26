@@ -3,7 +3,7 @@
  * Plugin Name: Spry Simple WP Security
  * Plugin URI:  https://sprywebtech.com/
  * Description: Lightweight WordPress hardening for dashboard file editing, XML-RPC, and PHP execution in the uploads directory.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Spry Web Tech
  * Author URI:  https://sprywebtech.com/
  * License:     GPL-2.0-or-later
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Spry_Simple_WP_Security {
-    const VERSION          = '1.0.0';
+    const VERSION          = '1.0.1';
     const OPTION_SETTINGS  = 'sswps_settings';
     const OPTION_STATE     = 'sswps_file_state';
     const NOTICE_TRANSIENT = 'sswps_admin_notices';
@@ -530,7 +530,7 @@ final class Spry_Simple_WP_Security {
 
     private static function atomic_write( $file, $contents ) {
         $dir  = dirname( $file );
-        $temp = wp_tempnam( basename( $file ), $dir );
+        $temp = wp_tempnam( basename( $file ), trailingslashit( $dir ) );
         if ( ! $temp ) {
             return false;
         }

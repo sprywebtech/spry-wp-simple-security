@@ -4,7 +4,7 @@ Tags: security, hardening, xml-rpc, uploads, file editor
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 
 Lightweight WordPress hardening for dashboard file editing, XML-RPC, and PHP execution in uploads.
@@ -36,6 +36,9 @@ On deactivation, the plugin removes only its own marked rule blocks. It does not
 HestiaCP commonly uses Nginx as a reverse proxy in front of Apache. The uploads .htaccess rules are enforced by Apache after the request is proxied. This plugin intentionally does not edit Hestia Nginx templates because Hestia updates or domain rebuilds may overwrite them.
 
 == Changelog ==
+
+= 1.0.1 =
+* Fixed temporary file creation under open_basedir-restricted HestiaCP environments.
 
 = 1.0.0 =
 * Initial release.

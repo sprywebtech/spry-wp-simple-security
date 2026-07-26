@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-25
+
+### Fixed
+
+- Create atomic-write temporary files inside the target directory when PHP `open_basedir` restrictions are enabled.
+
 ## [1.0.0] - 2026-07-25
 
 ### Added
