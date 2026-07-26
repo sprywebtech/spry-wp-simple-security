@@ -1,0 +1,130 @@
+name: Build Plugin Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build and publish plugin ZIP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Determine version and filenames
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          PLUGIN_SLUG="spry-simple-wp-security"
+          ZIP_NAME="${PLUGIN_SLUG}-${VERSION}.zip"
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "plugin_slug=${PLUGIN_SLUG}" >> "$GITHUB_OUTPUT"
+          echo "zip_name=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify plugin version matches tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPECTED_VERSION="${{ steps.release.outputs.version }}"
+
+          PLUGIN_VERSION="$(
+            sed -nE 's/^[[:space:]]*\*[[:space:]]*Version:[[:space:]]*([0-9.]+).*$/\1/p' \
+              spry-simple-wp-security.php |
+            head -n 1
+          )"
+
+          if [ -z "$PLUGIN_VERSION" ]; then
+            echo "Could not determine the plugin version."
+            exit 1
+          fi
+
+          if [ "$PLUGIN_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "Version mismatch:"
+            echo "Tag version:    $EXPECTED_VERSION"
+            echo "Plugin version: $PLUGIN_VERSION"
+            exit 1
+          fi
+
+          echo "Plugin version matches tag: $PLUGIN_VERSION"
+
+      - name: Build clean WordPress plugin ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PLUGIN_SLUG="${{ steps.release.outputs.plugin_slug }}"
+          ZIP_NAME="${{ steps.release.outputs.zip_name }}"
+          BUILD_ROOT="$RUNNER_TEMP/plugin-build"
+          PLUGIN_DIR="$BUILD_ROOT/$PLUGIN_SLUG"
+
+          rm -rf "$BUILD_ROOT"
+          mkdir -p "$PLUGIN_DIR"
+
+          # Files required or useful in the installable plugin.
+          cp spry-simple-wp-security.php "$PLUGIN_DIR/"
+          cp uninstall.php "$PLUGIN_DIR/"
+          cp readme.txt "$PLUGIN_DIR/"
+
+          # Include the license when present.
+          if [ -f LICENSE ]; then
+            cp LICENSE "$PLUGIN_DIR/"
+          fi
+
+          # Include runtime/plugin assets when present.
+          if [ -d assets ]; then
+            cp -R assets "$PLUGIN_DIR/"
+          fi
+
+          # Create a ZIP with the correct top-level plugin directory.
+          cd "$BUILD_ROOT"
+          zip -r "$GITHUB_WORKSPACE/$ZIP_NAME" "$PLUGIN_SLUG"
+
+          cd "$GITHUB_WORKSPACE"
+          sha256sum "$ZIP_NAME" > "$ZIP_NAME.sha256"
+
+          echo "Created:"
+          ls -lh "$ZIP_NAME" "$ZIP_NAME.sha256"
+
+          echo
+          echo "ZIP contents:"
+          unzip -l "$ZIP_NAME"
+
+      - name: Create release or upload release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          ZIP_NAME: ${{ steps.release.outputs.zip_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists. Replacing its plugin assets."
+
+            gh release upload "$TAG" \
+              "$ZIP_NAME" \
+              "$ZIP_NAME.sha256" \
+              --clobber
+          else
+            echo "Creating release $TAG."
+
+            gh release create "$TAG" \
+              "$ZIP_NAME" \
+              "$ZIP_NAME.sha256" \
+              --verify-tag \
+              --generate-notes \
+              --title "Spry Simple WP Security $TAG"
+          fi
