@@ -3,7 +3,7 @@
  * Plugin Name: Spry Simple WP Security
  * Plugin URI:  https://sprywebtech.com/
  * Description: Lightweight WordPress hardening for dashboard file editing, XML-RPC, and PHP execution in the uploads directory.
- * Version:     1.0.1
+ * Version:     1.0.3
  * Author:      Spry Web Tech
  * Author URI:  https://sprywebtech.com/
  * License:     GPL-2.0-or-later
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Spry_Simple_WP_Security {
-    const VERSION          = '1.0.1';
+    const VERSION          = '1.0.3';
     const OPTION_SETTINGS  = 'sswps_settings';
     const OPTION_STATE     = 'sswps_file_state';
     const NOTICE_TRANSIENT = 'sswps_admin_notices';
@@ -39,6 +39,7 @@ final class Spry_Simple_WP_Security {
         add_action( 'admin_init', array( $this, 'register_settings' ) );
         add_action( 'admin_notices', array( $this, 'render_admin_notices' ) );
         add_action( 'plugins_loaded', array( $this, 'maybe_block_xmlrpc' ), 0 );
+        add_action( 'admin_post_sswps_download_backup', array( $this, 'download_backup' ) );
 
         add_filter( 'xmlrpc_enabled', array( $this, 'filter_xmlrpc_enabled' ) );
         add_filter( 'wp_headers', array( $this, 'remove_pingback_header' ) );
@@ -173,7 +174,6 @@ final class Spry_Simple_WP_Security {
             <h1><?php esc_html_e( 'Spry Simple WP Security', 'spry-simple-wp-security' ); ?></h1>
             <p><?php esc_html_e( 'Lightweight hardening with reversible, marker-based file changes and backup copies.', 'spry-simple-wp-security' ); ?></p>
 
-            <?php settings_errors( self::OPTION_SETTINGS ); ?>
 
             <form method="post" action="options.php">
                 <?php settings_fields( 'sswps_settings_group' ); ?>
@@ -212,11 +212,119 @@ final class Spry_Simple_WP_Security {
                 <?php submit_button(); ?>
             </form>
 
-            <hr>
-            <h2><?php esc_html_e( 'HestiaCP / Nginx note', 'spry-simple-wp-security' ); ?></h2>
-            <p><?php esc_html_e( 'Your Nginx reverse proxy normally passes PHP requests to Apache, so the uploads .htaccess protection is effective at the Apache layer. The plugin intentionally does not edit Hestia or Nginx templates because control-panel updates can overwrite those files.', 'spry-simple-wp-security' ); ?></p>
+            <?php $this->render_backup_downloads(); ?>
         </div>
         <?php
+    }
+
+    private function get_backup_files() {
+        $dir = trailingslashit( WP_CONTENT_DIR ) . 'spry-simple-wp-security-backups';
+        if ( ! is_dir( $dir ) ) {
+            return array();
+        }
+
+        $files = glob( trailingslashit( $dir ) . '*.bak.php' );
+        return is_array( $files ) ? $files : array();
+    }
+
+    private function render_backup_downloads() {
+        $files = $this->get_backup_files();
+        ?>
+        <hr>
+        <h2><?php esc_html_e( 'Backup Files', 'spry-simple-wp-security' ); ?></h2>
+        <p><?php esc_html_e( 'Download the original file copies created before this plugin made its changes.', 'spry-simple-wp-security' ); ?></p>
+
+        <?php if ( empty( $files ) ) : ?>
+            <p><?php esc_html_e( 'No backup files are currently available.', 'spry-simple-wp-security' ); ?></p>
+        <?php else : ?>
+            <table class="widefat striped" style="max-width: 760px;">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e( 'Backup', 'spry-simple-wp-security' ); ?></th>
+                        <th><?php esc_html_e( 'Created', 'spry-simple-wp-security' ); ?></th>
+                        <th><?php esc_html_e( 'Download', 'spry-simple-wp-security' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ( $files as $file ) :
+                        $basename = basename( $file );
+                        $label    = preg_replace( '/\.bak\.php$/', '', $basename );
+                        $url      = wp_nonce_url(
+                            add_query_arg(
+                                array(
+                                    'action' => 'sswps_download_backup',
+                                    'file'   => rawurlencode( $basename ),
+                                ),
+                                admin_url( 'admin-post.php' )
+                            ),
+                            'sswps_download_backup_' . $basename
+                        );
+                        ?>
+                        <tr>
+                            <td><code><?php echo esc_html( $label ); ?></code></td>
+                            <td><?php echo esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), filemtime( $file ) ) ); ?></td>
+                            <td><a class="button button-secondary" href="<?php echo esc_url( $url ); ?>"><?php esc_html_e( 'Download', 'spry-simple-wp-security' ); ?></a></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif;
+    }
+
+    public function download_backup() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( esc_html__( 'You are not allowed to download these backup files.', 'spry-simple-wp-security' ), 403 );
+        }
+
+        $requested = isset( $_GET['file'] ) ? rawurldecode( wp_unslash( $_GET['file'] ) ) : '';
+        $basename  = basename( $requested );
+        $available = array_map( 'basename', $this->get_backup_files() );
+
+        if (
+            '' === $requested ||
+            $requested !== $basename ||
+            ! preg_match( '/^[A-Za-z0-9._-]+\.bak\.php$/', $basename ) ||
+            ! in_array( $basename, $available, true )
+        ) {
+            wp_die( esc_html__( 'Invalid backup file.', 'spry-simple-wp-security' ), 400 );
+        }
+
+        check_admin_referer( 'sswps_download_backup_' . $basename );
+
+        $dir      = trailingslashit( WP_CONTENT_DIR ) . 'spry-simple-wp-security-backups';
+        $file     = trailingslashit( $dir ) . $basename;
+        $real_dir = realpath( $dir );
+        $real     = realpath( $file );
+
+        if ( false === $real_dir || false === $real || dirname( $real ) !== $real_dir || ! is_readable( $real ) ) {
+            wp_die( esc_html__( 'The requested backup file could not be found.', 'spry-simple-wp-security' ), 404 );
+        }
+
+        $protected = file_get_contents( $real );
+        if ( false === $protected ) {
+            wp_die( esc_html__( 'The requested backup file could not be read.', 'spry-simple-wp-security' ), 500 );
+        }
+
+        $parts   = preg_split( '/\R/', $protected, 2 );
+        $payload = isset( $parts[1] ) ? trim( $parts[1] ) : '';
+        $name    = preg_replace( '/\.bak\.php$/', '', $basename );
+
+        if ( 'SSWPS_ORIGINAL_FILE_DID_NOT_EXIST' === $payload ) {
+            $contents = "No original file existed before Spry Simple WP Security created it.\n";
+            $name    .= '.not-created.txt';
+        } else {
+            $contents = base64_decode( $payload, true );
+            if ( false === $contents ) {
+                wp_die( esc_html__( 'The backup file is invalid or corrupted.', 'spry-simple-wp-security' ), 500 );
+            }
+        }
+
+        nocache_headers();
+        header( 'Content-Type: application/octet-stream' );
+        header( 'Content-Disposition: attachment; filename="' . str_replace( '"', '', $name ) . '"' );
+        header( 'Content-Length: ' . strlen( $contents ) );
+        echo $contents; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+        exit;
     }
 
     public function filter_xmlrpc_enabled( $enabled ) {
