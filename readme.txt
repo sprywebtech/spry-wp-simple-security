@@ -4,7 +4,7 @@ Tags: security, hardening, xml-rpc, uploads, file editor
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 
 Lightweight WordPress hardening for dashboard file editing, XML-RPC, and PHP execution in uploads.
@@ -21,8 +21,6 @@ Before changing wp-config.php or the uploads .htaccess file, the plugin creates 
 
 wp-content/spry-simple-wp-security-backups/
 
-Administrators can download the original protected backup contents from the plugin settings page.
-
 On deactivation, the plugin removes only its own marked rule blocks. It does not overwrite unrelated changes made by WordPress, another plugin, or an administrator.
 
 == Installation ==
@@ -36,6 +34,10 @@ On deactivation, the plugin removes only its own marked rule blocks. It does not
 HestiaCP commonly uses Nginx as a reverse proxy in front of Apache. The uploads .htaccess rules are enforced by Apache after the request is proxied. This plugin intentionally does not edit Hestia Nginx templates because Hestia updates or domain rebuilds may overwrite them.
 
 == Changelog ==
+
+= 1.0.3 =
+* Fixed backup downloads for filenames containing multiple extensions, including wp-config.php.bak.php and uploads.htaccess.bak.php.
+* Replaced sanitize_file_name validation with exact basename and available-backup validation.
 
 = 1.0.2 =
 * Fixed duplicate settings success and error notices.
